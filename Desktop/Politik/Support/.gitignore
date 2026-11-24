@@ -1,0 +1,14 @@
+# R / RStudio
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+
+# temporary SMON checkpoints (recomputed by 02_smon.R)
+Data/checkpoints/
+
+# old files not used by the current pipeline
+Data/archive/
+
+# personal log of saved plots
+plot_tracker.Rmd
