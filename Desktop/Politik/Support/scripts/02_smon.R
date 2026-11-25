@@ -13,10 +13,18 @@ source("scripts/00_setup.R")      # packages, functions, isn, epochs, san_period
 # ------------------------------------------------------------------
 # Settings
 # ------------------------------------------------------------------
-k_range   <- 2:50     # candidate numbers of communities
-runs_k    <- 50       # SMON runs per k for selecting k*
-runs_cons <- 100      # SMON runs for the consensus Z at k*
-n_cores   <- max(1, parallel::detectCores() - 1)
+k_range <- NULL   # set per period below: 2 to floor(n / 4)
+
+# candidate k per period: at most n/4 communities of at least 4 actors
+n_nodes <- vapply(san_periods, function(s) uniqueN(c(s$state1, s$state2)), integer(1))
+k_range <- lapply(n_nodes, function(n) 2:ceiling(n / 4))
+print(data.table(epoch = names(n_nodes), n = n_nodes,
+                 k_max = vapply(k_range, max, integer(1))))
+
+runs_k    <- 250       # SMON runs per k for selecting k*
+runs_cons <- 500      # SMON runs for the consensus Z at k*
+# n_cores   <- max(1, parallel::detectCores() - 1)
+n_cores <- 15
 
 ckpt <- "Data/checkpoints"
 dir.create(ckpt, recursive = TRUE, showWarnings = FALSE)
@@ -46,11 +54,11 @@ print(excluded)
 # ------------------------------------------------------------------
 # Parallel cluster (works on Windows, macOS and Linux)
 # ------------------------------------------------------------------
+closeAllConnections()
 cl <- parallel::makeCluster(n_cores)
 parallel::clusterEvalQ(cl, { library(data.table); library(igraph) })
 parallel::clusterExport(cl, c("run_smon", "update_elementwise"))
 parallel::clusterSetRNGStream(cl, 2026)   # reproducible for a given n_cores
-set.seed(2026)
 cat("Running on", n_cores, "cores\n")
 
 
@@ -68,7 +76,8 @@ for (e in names(epochs)) {
     avg <- readRDS(f)
     cat("epoch", e, ": loaded from checkpoint\n")
   } else {
-    res <- avg_mod_smon(san_periods[[e]], runs = runs_k, k_range = k_range, cl = cl)
+    parallel::clusterSetRNGStream(cl, 2026 + match(e, names(epochs)))
+    res <- avg_mod_smon(san_periods[[e]], runs = runs_k, k_range = k_range[[e]], cl = cl)
     avg <- res$avg[, epoch := e]
     saveRDS(avg, f)
     cat("epoch", e, ": done in", round(res$total_time / 60, 1), "min\n")
@@ -100,10 +109,14 @@ sd_comparison[, ratio := sd_at_max / sd_at_kstar]
 print(sd_comparison)
 
 # k* when the curves are normalized over shorter k ranges (appendix)
-k_sens <- rbindlist(lapply(c(20, 30, 50), function(km) {
-  avg_epochs[k <= km, .(k_max = km, k_star = choose_k_cross(.SD)), by = epoch]
+k_sens <- rbindlist(lapply(names(epochs), function(e) {
+  bounds <- c("20" = 20, "30" = 30, "n/4" = max(k_range[[e]]))
+  rbindlist(lapply(names(bounds), function(b) {
+    avg_epochs[epoch == e & k <= bounds[[b]],
+               .(epoch = e, bound = b, k_star = choose_k_cross(.SD))]
+  }))
 }))
-print(dcast(k_sens, epoch ~ k_max, value.var = "k_star"))
+print(dcast(k_sens, epoch ~ bound, value.var = "k_star"))
 saveRDS(k_sens, "Data/results/epochs_k_sensitivity.rds")
 
 # ==================================================================
@@ -120,6 +133,7 @@ for (e in names(epochs)) {
     cons <- readRDS(f)
     cat("epoch", e, ": consensus loaded from checkpoint\n")
   } else {
+    parallel::clusterSetRNGStream(cl, 3026 + match(e, names(epochs)))
     cons <- smon_consensus(san_periods[[e]], k = k_star[[e]], runs = runs_cons, cl = cl)
     saveRDS(cons, f)
     cat("epoch", e, ": consensus done (k* =", k_star[[e]], ")\n")
@@ -130,6 +144,19 @@ for (e in names(epochs)) {
 }
 
 parallel::stopCluster(cl)
+
+for (e in names(epochs)) {
+  f <- file.path(ckpt, paste0("consensus_", e, "_k", k_star[[e]], ".rds"))
+  cons <- readRDS(f)
+  cat(e, ": iterations =", cons$align_iter, "| unstable runs =", cons$n_unstable, "\n")
+  if (cons$n_unstable > 0) {
+    z <- cons$avg_z
+    top2 <- t(apply(z, 1, function(r) sort(r, decreasing = TRUE)[1:2]))
+    margin <- top2[, 1] - top2[, 2]
+    bound <- cons$n_unstable / length(cons$zero_share) * 0 + cons$n_unstable / 500
+    print(sort(margin[margin < bound]))
+  }
+}
 
 comm_epochs <- rbindlist(comm_all)  # actors, community, prob, epoch
 

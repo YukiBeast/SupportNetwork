@@ -16,7 +16,7 @@ k_star           <- readRDS("Data/results/epochs_k_star.rds")
 sd_comparison    <- readRDS("Data/results/epochs_sd_comparison.rds")
 comm             <- as.data.table(readRDS("Data/results/epochs_communities_avg.rds"))
 # actors with no membership in most runs are unassigned
-zero_cut <- 0.5
+zero_cut <- 0.75
 comm[zero_share > zero_cut, community := NA_integer_]
 
 # renumber communities by size within each period (1 = largest), so plots,
@@ -77,6 +77,8 @@ for (e in names(epochs)) {
     priority_nodes = c("United States of America", "Russia (Soviet Union)"),
     path    = paste0(out, "smon_community_net", e, ".pdf"),
     width   = 12, height = 8,
+    edge_alpha = c(within = 0.1, between = 0.1),
+    min_alpha = 0.3,
     top_n = 7,
     caption = paste0("SMON communities ", e, ". Fill = community (the largest 5 + the two containing USA and Russia),
     other actors (gray) have community ranking (by size) attached.
