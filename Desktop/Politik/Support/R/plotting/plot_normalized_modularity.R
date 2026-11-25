@@ -164,14 +164,15 @@ plot_normalized_modularity <- function(avg_epochs,
     
     facet_wrap(
       ~ epoch,
-      ncol = facet_ncol
+      ncol = facet_ncol,
+      scales = "free_x"
     ) +
     
     scale_color_manual(values = colors) +
     scale_fill_manual(values = colors) +
     
     scale_x_continuous(
-      breaks = seq(0, 50, 5)
+      breaks = scales::breaks_width(5)
     ) +
     
     scale_y_continuous(

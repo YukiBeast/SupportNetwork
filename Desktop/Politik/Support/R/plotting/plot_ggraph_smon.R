@@ -35,6 +35,7 @@ plot_ggraph_smon <- function(san_period, communities, path = NULL,
                              number_other = TRUE,
                              show_hulls = FALSE, hull_min_size = 3,
                              edge_alpha = c(within = 0.35, between = 0.08),
+                             min_alpha = 0.25,
                              width = 10, height = 8,           # pdf size in inches
                              caption = "No caption provided",
                              log_file = "plot_tracker.Rmd") {
@@ -83,7 +84,7 @@ plot_ggraph_smon <- function(san_period, communities, path = NULL,
   # --- 5. node attributes ---
   V(g)$degree    <- degree(g)
   V(g)$label     <- get_iso3(V(g)$name)
-  V(g)$alpha_val <- pmin(pmax(V(g)$memb_weight, 0.15), 1)   # absolute, not rescaled per plot
+  V(g)$alpha_val <- pmin(pmax(V(g)$memb_weight, min_alpha), 1)   # absolute, not rescaled per plot
   V(g)$comm_size <- as.numeric(table(V(g)$community)[V(g)$community])
   E(g)$edge_a    <- ifelse(same_comm(g), edge_alpha[["within"]], edge_alpha[["between"]])
 
